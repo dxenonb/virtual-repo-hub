@@ -74,6 +74,7 @@ fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
         out
     };
 
+    // TODO: figure out if there should be an early return at all
     if bare {
         return Ok(RepoStatus {
             bare,
