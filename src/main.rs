@@ -2,8 +2,6 @@ use git2::{Repository, RepositoryState};
 
 use std::env;
 
-// struct RemoteUrl(String);
-
 #[derive(Debug)]
 struct RepoStatus {
     bare: bool,
@@ -12,20 +10,13 @@ struct RepoStatus {
     /// True if there is no conflict resolution in progress.
     clean_state: bool,
     stashes: usize,
-    // remotes: Vec<RemoteUrl>,
+    remotes: Vec<Remote>,
     // branches: HashMap<String, BranchStatus>,
 }
 
-impl RepoStatus {
-    fn bare() -> RepoStatus {
-        // TODO: What can actually have other values in a bare repo?
-        RepoStatus {
-            bare: true,
-            clean_status: true,
-            clean_state: true,
-            stashes: 0,
-        }
-    }
+#[derive(Debug)]
+struct Remote {
+    name: String,
 }
 
 /*
@@ -72,8 +63,25 @@ fn main() -> Result<(), i32> {
 fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
     let bare = repo.is_bare();
 
+    let remotes = {
+        let mut out = Vec::new();
+        let remotes = repo.remotes()?;
+        for remote in remotes.iter() {
+            let name = remote.map(|s| s.to_string())
+                .unwrap_or_else(|| "[non unicode]".to_string());
+            out.push(Remote { name })
+        }
+        out
+    };
+
     if bare {
-        return Ok(RepoStatus::bare());
+        return Ok(RepoStatus {
+            bare,
+            remotes,
+            clean_status: true,
+            clean_state: true,
+            stashes: 0,
+        });
     }
 
     let mut clean_status = true;
@@ -103,5 +111,6 @@ fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
         clean_status,
         clean_state,
         stashes,
+        remotes,
     })
 }
