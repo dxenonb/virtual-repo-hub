@@ -101,7 +101,6 @@ fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
 
     let mut stashes = 0;
     repo.stash_foreach(|i, s, _| {
-        println!("Got stash: {}, {}", i, s);
         stashes += 1;
         true
     })?;
