@@ -11,9 +11,21 @@ struct RepoStatus {
     clean_status: bool,
     /// True if there is no conflict resolution in progress.
     clean_state: bool,
+    stashes: usize,
     // remotes: Vec<RemoteUrl>,
-    // stashes: usize,
     // branches: HashMap<String, BranchStatus>,
+}
+
+impl RepoStatus {
+    fn bare() -> RepoStatus {
+        // TODO: What can actually have other values in a bare repo?
+        RepoStatus {
+            bare: true,
+            clean_status: true,
+            clean_state: true,
+            stashes: 0,
+        }
+    }
 }
 
 /*
@@ -41,7 +53,7 @@ fn main() -> Result<(), i32> {
         }
     };
 
-    let repo = match Repository::open(path.clone()) {
+    let mut repo = match Repository::open(path.clone()) {
         Ok(repo) => repo,
         Err(_) => {
             eprintln!("Failed to open a git repo at {}", &path);
@@ -49,7 +61,7 @@ fn main() -> Result<(), i32> {
         }
     };
 
-    let status = get_status(&repo)
+    let status = get_status(&mut repo)
         .expect("Failed to get repo status");
 
     println!("Got repo status: {:?}", &status);
@@ -57,33 +69,39 @@ fn main() -> Result<(), i32> {
     Ok(())
 }
 
-fn get_status(repo: &Repository) -> Result<RepoStatus, git2::Error> {
+fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
     let bare = repo.is_bare();
 
     if bare {
-        return Ok(RepoStatus {
-            bare,
-            clean_status: true,
-            clean_state: true,
-        });
+        return Ok(RepoStatus::bare());
     }
 
-    let statuses = repo.statuses(None)?;
-
-    let cmp_status = git2::Status::CURRENT | git2::Status::IGNORED;
     let mut clean_status = true;
-    for entry in statuses.iter() {
-        if !entry.status().intersects(cmp_status) {
-            clean_status = false;
-            break;
+    {
+        let statuses = repo.statuses(None)?;
+
+        let cmp_status = git2::Status::CURRENT | git2::Status::IGNORED;
+        for entry in statuses.iter() {
+            if !entry.status().intersects(cmp_status) {
+                clean_status = false;
+                break;
+            }
         }
     }
 
     let clean_state = repo.state() == RepositoryState::Clean;
 
+    let mut stashes = 0;
+    repo.stash_foreach(|i, s, _| {
+        println!("Got stash: {}, {}", i, s);
+        stashes += 1;
+        true
+    })?;
+
     Ok(RepoStatus {
         bare: false,
         clean_status,
         clean_state,
+        stashes,
     })
 }
