@@ -101,7 +101,7 @@ fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
     let clean_state = repo.state() == RepositoryState::Clean;
 
     let mut stashes = 0;
-    repo.stash_foreach(|i, s, _| {
+    repo.stash_foreach(|_, _, _| {
         stashes += 1;
         true
     })?;
