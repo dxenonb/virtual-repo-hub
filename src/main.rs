@@ -1,30 +1,45 @@
 use git2::{Repository, RepositoryState};
 
+#[cfg(test)]
+use serde::{Serialize, Deserialize};
+
 use std::env;
 use std::collections::HashMap;
 
 #[cfg(test)]
 mod test;
 
-#[derive(Debug)]
-struct RepoStatus {
-    bare: bool,
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test,
+    derive(Serialize, Deserialize),
+    serde(rename_all="snake_case"))
+]
+pub struct RepoStatus {
+    pub bare: bool,
     /// True if nothing is staged and there are no untracked files.
-    clean_status: bool,
+    pub clean_status: bool,
     /// True if there is no conflict resolution in progress.
-    clean_state: bool,
-    stashes: usize,
-    remotes: Vec<Remote>,
-    branches: HashMap<String, BranchStatus>,
+    pub clean_state: bool,
+    pub stashes: usize,
+    pub remotes: Vec<Remote>,
+    pub branches: HashMap<String, BranchStatus>,
 }
 
-#[derive(Debug)]
-struct Remote {
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test,
+    derive(Serialize, Deserialize),
+    serde(rename_all="snake_case"))
+]
+pub struct Remote {
     name: String,
 }
 
-#[derive(Debug)]
-enum BranchStatus {
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test,
+    derive(Serialize, Deserialize),
+    serde(rename_all="snake_case"))
+]
+pub enum BranchStatus {
     TrackingBranch(TrackingStatus),
     LocalBranch {
         merged_in_remote: bool,
@@ -55,8 +70,12 @@ impl BranchStatus {
     }
 }
 
-#[derive(Debug)]
-enum TrackingStatus {
+#[derive(Debug, PartialEq)]
+#[cfg_attr(test,
+    derive(Serialize, Deserialize),
+    serde(rename_all="snake_case"))
+]
+pub enum TrackingStatus {
     Diverged,
     Ahead,
     Behind,
