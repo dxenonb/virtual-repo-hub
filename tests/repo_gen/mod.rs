@@ -34,11 +34,14 @@ impl GenState {
             .expect("failed to set working directory for new repo");
 
         let args = if bare { &["init", "--bare"][..] } else { &["init"][..] };
-        assert!(run_git(args).success());
+        run_git(args);
 
         let name = "origin";
         self.repos.insert(name.to_string(), temp_dir);
         self.active = Some(name.to_string());
+
+        run_git(&["config", "user.email", "foo.bar@example.com"]);
+        run_git(&["config", "user.name", "Foo Bar"]);
     }
 
     pub fn commit(&mut self, repeat: u32) {
@@ -60,14 +63,17 @@ impl GenState {
         f.write_all(b"init")
             .unwrap();
 
+        // we can't commit untracked files without notifying git they exist;
+        // once the index is alerted to the new file though, "one stage" git-commit works fine
+        run_git(&["add", file_name]);
+
         for _ in 0..repeat {
             f.write_all(b"\tcommit!")
                 .unwrap();
             f.flush()
                 .unwrap();
 
-            let status = run_git(&["commit", "-m", "arbitrary commit", "--", file_name]);
-            assert!(status.success());
+            run_git(&["commit", "-m", "arbitrary commit", file_name]);
         }
     }
 
@@ -129,7 +135,7 @@ pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
     path: P,
 ) -> Result<(), (usize, AssertionError)> {
     let contents = fs::read_to_string(&path)
-        .unwrap();
+        .expect(&format!("failed to open yaml at {:?}", &path));
     let commands: Vec<GenCommand> = serde_yaml::from_str(&contents)
         .expect(&format!("failed to read commands at {:?}", &path));
 
@@ -143,12 +149,13 @@ pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
     Ok(())
 }
 
-fn run_git(args: &[&str]) -> ExitStatus {
-    Command::new("git")
+fn run_git(args: &[&str]) {
+    let status = Command::new("git")
         .args(args)
         .stdout(Stdio::null())
         .status()
-        .expect("failed to run git command")
+        .expect("failed to run git command");
+    assert!(status.success());
 }
 
 fn r#false() -> bool {
