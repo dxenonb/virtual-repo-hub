@@ -23,6 +23,19 @@ impl GenState {
         }
     }
 
+    pub fn cleanup(self) {
+        for (_, v) in self.repos {
+            match v.close() {
+                Err(err) => {
+                    eprintln!("There was an issue cleaning up the generator state:");
+                    eprintln!("\tTempDir reported an error deleting itself.");
+                    eprintln!("{}", err);
+                },
+                Ok(_) => {},
+            }
+        }
+    }
+
     pub fn init(&mut self, bare: bool) {
         if let Some(_) = self.active {
             unimplemented!();
@@ -145,6 +158,8 @@ pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
             return Err((i, err));
         }
     }
+
+    state.cleanup();
 
     Ok(())
 }
