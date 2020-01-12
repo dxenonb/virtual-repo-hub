@@ -1,28 +1,29 @@
-use crate::RepoStatus;
+use virtual_repo_hub::{RepoStatus, get_status_path};
 
 use serde::{Serialize, Deserialize};
 use tempfile::{tempdir, TempDir};
 
 use std::collections::HashMap;
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
 use std::env::{current_dir, set_current_dir};
 use std::fs;
+use std::path::Path;
 use std::io::{Write, BufWriter};
 
-struct GenState {
+pub struct GenState {
     repos: HashMap<String, TempDir>,
     active: Option<String>,
 }
 
 impl GenState {
-    fn new() -> Self {
+    pub fn new() -> Self {
         GenState {
             repos: HashMap::new(),
             active: None,
         }
     }
 
-    fn init(&mut self, bare: bool) {
+    pub fn init(&mut self, bare: bool) {
         if let Some(_) = self.active {
             unimplemented!();
         }
@@ -40,7 +41,7 @@ impl GenState {
         self.active = Some(name.to_string());
     }
 
-    fn commit(&mut self, repeat: u32) {
+    pub fn commit(&mut self, repeat: u32) {
         self.assert_active();
 
         if repeat == 0 {
@@ -70,7 +71,7 @@ impl GenState {
         }
     }
 
-    fn assert_active(&self) {
+    pub fn assert_active(&self) {
         assert!(self.active.is_some(), "no git repo is active");
         let td = self.repos.get(self.active.as_ref().unwrap())
             .unwrap()
@@ -81,7 +82,7 @@ impl GenState {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all="snake_case")]
-enum GenCommand {
+pub enum GenCommand {
     Init {
         #[serde(default="r#false")]
         bare: bool,
@@ -97,90 +98,57 @@ enum GenCommand {
 }
 
 impl GenCommand {
-    fn execute(&self, state: &mut GenState) {
+    pub fn execute(&self, state: &mut GenState) -> Result<(), AssertionError> {
         use GenCommand::*;
         match self {
             Init { bare } => state.init(*bare),
             Commit { repeat } => state.commit(*repeat),
+            Expect { status } => {
+                let actual = get_status_path(current_dir().unwrap())
+                    .expect("failed to get actual repo status");
+                return Err(AssertionError {
+                    expected: status.clone(),
+                    actual,
+                });
+            },
             _ => unimplemented!(),
         }
+
+        Ok(())
     }
+}
+
+pub struct AssertionError {
+    pub expected: RepoStatus,
+    pub actual: RepoStatus,
+}
+
+pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
+    path: P,
+) -> Result<(), (usize, AssertionError)> {
+    let contents = fs::read_to_string(&path)
+        .unwrap();
+    let commands: Vec<GenCommand> = serde_yaml::from_str(&contents)
+        .expect(&format!("failed to read commands at {:?}", &path));
+
+    let mut state = GenState::new();
+    for (i, cmd) in commands.iter().enumerate() {
+        if let Err(err) = cmd.execute(&mut state) {
+            return Err((i, err));
+        }
+    }
+
+    Ok(())
 }
 
 fn run_git(args: &[&str]) -> ExitStatus {
     Command::new("git")
         .args(args)
+        .stdout(Stdio::null())
         .status()
         .expect("failed to run git command")
 }
 
 fn r#false() -> bool {
     false
-}
-
-mod test {
-    use super::*;
-
-    const EXAMPLE1: &str = "
-        - init: {}
-        - commit:
-            repeat: 3
-        - modify: {}
-        - stage: {}
-        - expect:
-            status:
-                bare: false
-                clean_status: true
-                clean_state: true
-                stashes: 0
-                remotes: []
-                branches: {}";
-
-    #[test]
-    #[should_panic]
-    fn detects_inactive_state() {
-        let state = GenState::new();
-        state.assert_active();
-    }
-
-    #[test]
-    #[should_panic]
-    fn detects_evaded_state() {
-        use std::env;
-
-        let mut state = GenState::new();
-        state.init(false);
-
-        set_current_dir(env::var("HOME").unwrap())
-            .unwrap();
-
-        state.assert_active();
-    }
-
-    #[test]
-    fn asserts_active() {
-        let mut state = GenState::new();
-        state.init(false);
-        state.assert_active();
-    }
-
-    #[test]
-    fn parses_commands() {
-        let commands: Vec<GenCommand> = serde_yaml::from_str(EXAMPLE1)
-            .unwrap();
-
-        let status = match &commands.last().unwrap() {
-            GenCommand::Expect { status } => status,
-            _ => panic!(),
-        };
-
-        assert_eq!(status, &RepoStatus {
-            bare: false,
-            clean_status: true,
-            clean_state: true,
-            stashes: 0,
-            remotes: Vec::new(),
-            branches: HashMap::new(),
-        });
-    }
 }
