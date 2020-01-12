@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use tempfile::{tempdir, TempDir};
 
 use std::collections::HashMap;
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, Stdio};
 use std::env::{current_dir, set_current_dir};
 use std::fs;
 use std::path::Path;
@@ -53,8 +53,35 @@ impl GenState {
         self.repos.insert(name.to_string(), temp_dir);
         self.active = Some(name.to_string());
 
-        run_git(&["config", "user.email", "foo.bar@example.com"]);
-        run_git(&["config", "user.name", "Foo Bar"]);
+        self.config();
+    }
+
+    pub fn clone(&mut self) {
+        self.assert_active();
+
+        let active = self.active.as_ref()
+            .unwrap();
+        let source_path = self.repos.get(active)
+            .unwrap()
+            .path()
+            .to_str()
+            .unwrap();
+
+        let clone = tempdir().unwrap();
+        let clone_path = clone.path()
+            .to_str()
+            .unwrap();
+
+        run_git(&["clone", source_path, clone_path]);
+
+        set_current_dir(clone.path())
+            .expect("failed to set working directory for cloned repo");
+
+        let name = "clone";
+        self.repos.insert(name.to_string(), clone);
+        self.active = Some(name.to_string());
+
+        self.config();
     }
 
     pub fn commit(&mut self, repeat: u32) {
@@ -90,6 +117,15 @@ impl GenState {
         }
     }
 
+    pub fn config(&self) {
+        self.assert_active();
+
+        run_git(&["config", "user.email", "foo.bar@example.com"]);
+        run_git(&["config", "user.name", "Foo Bar"]);
+    }
+
+    /// Check that some kind of repo has been initialized and that the current working directory
+    /// matches the appropriate location.
     pub fn assert_active(&self) {
         assert!(self.active.is_some(), "no git repo is active");
         let td = self.repos.get(self.active.as_ref().unwrap())
@@ -106,6 +142,7 @@ pub enum GenCommand {
         #[serde(default="r#false")]
         bare: bool,
     },
+    Clone {},
     Commit {
         repeat: u32,
     },
@@ -121,6 +158,7 @@ impl GenCommand {
         use GenCommand::*;
         match self {
             Init { bare } => state.init(*bare),
+            Clone {} => state.clone(),
             Commit { repeat } => state.commit(*repeat),
             Expect { status } => {
                 let actual = get_status_path(current_dir().unwrap())

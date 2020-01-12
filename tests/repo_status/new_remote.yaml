@@ -1,0 +1,11 @@
+- init: {}
+- clone: {}
+- expect:
+    status:
+      bare: false
+      clean_status: true
+      clean_state: true
+      stashes: 0
+      remotes:
+        - name: "origin"
+      branches: {}
