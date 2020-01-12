@@ -8,19 +8,43 @@ use std::process::{Command, Stdio};
 use std::env::{current_dir, set_current_dir};
 use std::fs;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::io;
 use std::io::{Write, BufWriter};
 
 const DEFAULT_FILE: &str = "default.txt";
 
 pub struct GenState {
-    repos: HashMap<String, TempDir>,
+    use_directory: Option<(usize, PathBuf)>,
+    repos: HashMap<String, RepoLocation>,
     active: Option<String>,
+}
+
+enum RepoLocation {
+    Temp(TempDir),
+    Perm(PathBuf),
+}
+
+impl RepoLocation {
+    fn path(&self) -> &Path {
+        match self {
+            RepoLocation::Temp(dir) => dir.path(),
+            RepoLocation::Perm(dir) => dir.as_path(),
+        }
+    }
+
+    fn close(self) -> Result<(), io::Error> {
+        match self {
+            RepoLocation::Temp(dir) => dir.close(),
+            _ => Ok(()),
+        }
+    }
 }
 
 impl GenState {
     pub fn new() -> Self {
         GenState {
+            use_directory: None,
             repos: HashMap::new(),
             active: None,
         }
@@ -44,7 +68,7 @@ impl GenState {
             unimplemented!();
         }
 
-        let temp_dir = tempdir().unwrap();
+        let temp_dir = self.alloc_dir().unwrap();
 
         set_current_dir(temp_dir.path())
             .expect("failed to set working directory for new repo");
@@ -62,16 +86,16 @@ impl GenState {
     pub fn clone(&mut self) {
         self.assert_active();
 
+        let clone = self.alloc_dir().unwrap();
+        let clone_path = clone.path()
+            .to_str()
+            .unwrap();
+
         let active = self.active.as_ref()
             .unwrap();
         let source_path = self.repos.get(active)
             .unwrap()
             .path()
-            .to_str()
-            .unwrap();
-
-        let clone = tempdir().unwrap();
-        let clone_path = clone.path()
             .to_str()
             .unwrap();
 
@@ -134,6 +158,12 @@ impl GenState {
             .expect("failed to open file for appending");
 
         BufWriter::new(f)
+    }
+
+    fn alloc_dir(&mut self) -> Result<RepoLocation, io::Error> {
+        // TODO: Support custom dir
+        tempdir()
+            .map(|dir| RepoLocation::Temp(dir))
     }
 
     pub fn config(&self) {
@@ -205,6 +235,9 @@ pub struct AssertionError {
 pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
     path: P,
 ) -> Result<(), (usize, AssertionError)> {
+    let working_dir = current_dir()
+        .unwrap();
+
     let contents = fs::read_to_string(&path)
         .expect(&format!("failed to open yaml at {:?}", &path));
     let commands: Vec<GenCommand> = serde_yaml::from_str(&contents)
@@ -216,6 +249,9 @@ pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
             return Err((i, err));
         }
     }
+
+    set_current_dir(&working_dir)
+            .expect("failed to update working directory");
 
     state.cleanup();
 
