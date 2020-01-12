@@ -7,8 +7,11 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::env::{current_dir, set_current_dir};
 use std::fs;
+use std::fs::File;
 use std::path::Path;
 use std::io::{Write, BufWriter};
+
+const DEFAULT_FILE: &str = "default.txt";
 
 pub struct GenState {
     repos: HashMap<String, TempDir>,
@@ -91,14 +94,8 @@ impl GenState {
             return;
         }
 
-        let file_name = "default.txt";
-        let f = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(file_name)
-            .expect("failed to open file for committing");
-
-        let mut f = BufWriter::new(f);
+        let file_name = DEFAULT_FILE;
+        let mut f = GenState::get_file(file_name);
 
         f.write_all(b"init")
             .unwrap();
@@ -115,6 +112,28 @@ impl GenState {
 
             run_git(&["commit", "-m", "arbitrary commit", file_name]);
         }
+    }
+
+    pub fn modify(&mut self) {
+        let mut f = GenState::get_file(DEFAULT_FILE);
+        f.write_all(b"modifying!")
+            .unwrap();
+        f.flush()
+            .unwrap();
+    }
+
+    pub fn stage(&mut self) {
+        run_git(&["add", DEFAULT_FILE]);
+    }
+
+    fn get_file<P: AsRef<Path>>(path: P) -> BufWriter<File> {
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .expect("failed to open file for appending");
+
+        BufWriter::new(f)
     }
 
     pub fn config(&self) {
@@ -160,6 +179,8 @@ impl GenCommand {
             Init { bare } => state.init(*bare),
             Clone {} => state.clone(),
             Commit { repeat } => state.commit(*repeat),
+            Modify {} => state.modify(),
+            Stage {} => state.stage(),
             Expect { status } => {
                 let actual = get_status_path(current_dir().unwrap())
                     .expect("failed to get actual repo status");
@@ -170,7 +191,6 @@ impl GenCommand {
                     });
                 }
             },
-            _ => unimplemented!(),
         }
 
         Ok(())
