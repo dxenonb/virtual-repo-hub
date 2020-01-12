@@ -7,6 +7,7 @@ use crate::repo_gen::{
 
 use std::path::PathBuf;
 use std::fs;
+use std::env;
 
 struct Test {
     path: PathBuf,
@@ -16,12 +17,18 @@ struct Test {
 
 #[test]
 fn repo_status_suite() {
+    let working_dir = env::current_dir()
+        .unwrap();
+
     let entries = fs::read_dir("tests/repo_status")
         .expect("failed to read directory");
 
     let mut results = Vec::new();
 
     for entry in entries {
+        env::set_current_dir(&working_dir)
+            .expect("failed to update working directory");
+
         let entry = entry.expect("failed to read entry");
         let path = entry.path();
         let name = path.file_name()
