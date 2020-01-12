@@ -25,7 +25,6 @@ pub struct Remote {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
 pub enum BranchStatus {
     TrackingBranch(TrackingStatus),
     LocalBranch {
@@ -58,7 +57,6 @@ impl BranchStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
 pub enum TrackingStatus {
     Diverged,
     Ahead,

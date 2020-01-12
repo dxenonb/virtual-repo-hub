@@ -1,0 +1,14 @@
+- init: {}
+- commit:
+    repeat: 3
+- expect:
+    status:
+      bare: false
+      clean_status: true
+      clean_state: true
+      stashes: 0
+      remotes: []
+      branches:
+        master:
+          LocalBranch:
+            merged_in_remote: false
