@@ -1,7 +1,9 @@
 mod repo_gen;
 
+#[allow(unused)]
 use crate::repo_gen::{
     execute_yaml,
+    execute_yaml_in_dir,
     AssertionError,
 };
 
@@ -30,6 +32,8 @@ fn repo_status_suite() {
             .unwrap()
             .to_string();
         if name.ends_with(".yaml") {
+            // let mut target_dir = PathBuf::from("local/test_repos");
+            // target_dir.push(&name);
             let r = if let Err(error) = execute_yaml(&path) {
                 Test {
                     path,

@@ -42,9 +42,16 @@ impl RepoLocation {
 }
 
 impl GenState {
-    pub fn new() -> Self {
+    // TODO: because we used canonicalize, we should no longer take a PathBuf
+    pub fn new(use_directory: Option<PathBuf>) -> Self {
         GenState {
-            use_directory: None,
+            use_directory: use_directory.map(|dir| {
+                fs::create_dir_all(&dir)
+                    .expect("failed to create full directory path");
+                let dir = fs::canonicalize(dir)
+                    .expect("failed to canonicalize use_directory");
+                (1, dir)
+            }),
             repos: HashMap::new(),
             active: None,
         }
@@ -121,7 +128,7 @@ impl GenState {
         let file_name = DEFAULT_FILE;
         let mut f = GenState::get_file(file_name);
 
-        f.write_all(b"init")
+        f.write_all(b"init\n")
             .unwrap();
 
         // we can't commit untracked files without notifying git they exist;
@@ -129,7 +136,7 @@ impl GenState {
         run_git(&["add", file_name]);
 
         for _ in 0..repeat {
-            f.write_all(b"\tcommit!")
+            f.write_all(b"\tcommit!\n")
                 .unwrap();
             f.flush()
                 .unwrap();
@@ -140,7 +147,7 @@ impl GenState {
 
     pub fn modify(&mut self) {
         let mut f = GenState::get_file(DEFAULT_FILE);
-        f.write_all(b"modifying!")
+        f.write_all(b"modifying!\n")
             .unwrap();
         f.flush()
             .unwrap();
@@ -161,9 +168,19 @@ impl GenState {
     }
 
     fn alloc_dir(&mut self) -> Result<RepoLocation, io::Error> {
-        // TODO: Support custom dir
-        tempdir()
-            .map(|dir| RepoLocation::Temp(dir))
+        match &mut self.use_directory {
+            Some((i, dir)) => {
+                let mut path = dir.clone();
+                path.push(i.to_string());
+                *i += 1;
+                fs::create_dir_all(&path)
+                    .expect("failed to create permanent dir");
+                Ok(RepoLocation::Perm(path))
+            },
+            None =>
+                tempdir()
+                    .map(|dir| RepoLocation::Temp(dir))
+        }
     }
 
     pub fn config(&self) {
@@ -235,6 +252,21 @@ pub struct AssertionError {
 pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
     path: P,
 ) -> Result<(), (usize, AssertionError)> {
+    execute_yaml_inner::<_, PathBuf>(path, None)
+}
+
+#[allow(dead_code)]
+pub fn execute_yaml_in_dir<P1: AsRef<Path> + std::fmt::Debug, P2: Into<PathBuf>>(
+    path: P1,
+    dir: P2,
+) -> Result<(), (usize, AssertionError)> {
+    execute_yaml_inner(path, Some(dir))
+}
+
+fn execute_yaml_inner<P1: AsRef<Path> + std::fmt::Debug, P2: Into<PathBuf>>(
+    path: P1,
+    target_directory: Option<P2>,
+) -> Result<(), (usize, AssertionError)> {
     let working_dir = current_dir()
         .unwrap();
 
@@ -243,10 +275,13 @@ pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
     let commands: Vec<GenCommand> = serde_yaml::from_str(&contents)
         .expect(&format!("failed to read commands at {:?}", &path));
 
-    let mut state = GenState::new();
+    let target_directory = target_directory.map(|dir| dir.into());
+    let mut state = GenState::new(target_directory);
+    let mut result = Ok(());
     for (i, cmd) in commands.iter().enumerate() {
         if let Err(err) = cmd.execute(&mut state) {
-            return Err((i, err));
+            result = Err((i, err));
+            break;
         }
     }
 
@@ -255,7 +290,7 @@ pub fn execute_yaml<P: AsRef<Path> + std::fmt::Debug>(
 
     state.cleanup();
 
-    Ok(())
+    result
 }
 
 fn run_git(args: &[&str]) {

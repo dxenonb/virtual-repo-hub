@@ -27,7 +27,7 @@ const EXAMPLE1: &str = "
 #[should_panic]
 #[ignore]
 fn detects_inactive_state() {
-    let state = GenState::new();
+    let state = GenState::new(None);
     state.assert_active();
 }
 
@@ -36,7 +36,7 @@ fn detects_inactive_state() {
 fn detects_evaded_state() {
     use std::env;
 
-    let mut state = GenState::new();
+    let mut state = GenState::new(None);
     state.init(false);
 
     set_current_dir(env::var("HOME").unwrap())
@@ -48,7 +48,7 @@ fn detects_evaded_state() {
 #[test]
 #[ignore]
 fn asserts_active() {
-    let mut state = GenState::new();
+    let mut state = GenState::new(None);
     state.init(false);
     state.assert_active();
 }
