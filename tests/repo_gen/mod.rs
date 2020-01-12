@@ -33,7 +33,7 @@ impl GenState {
         set_current_dir(temp_dir.path())
             .expect("failed to set working directory for new repo");
 
-        let args = if bare { &["init"][..] } else { &["init", "--bare"][..] };
+        let args = if bare { &["init", "--bare"][..] } else { &["init"][..] };
         assert!(run_git(args).success());
 
         let name = "origin";
@@ -106,10 +106,12 @@ impl GenCommand {
             Expect { status } => {
                 let actual = get_status_path(current_dir().unwrap())
                     .expect("failed to get actual repo status");
-                return Err(AssertionError {
-                    expected: status.clone(),
-                    actual,
-                });
+                if status != &actual {
+                    return Err(AssertionError {
+                        expected: status.clone(),
+                        actual,
+                    });
+                }
             },
             _ => unimplemented!(),
         }
