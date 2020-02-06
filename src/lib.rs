@@ -5,6 +5,8 @@ use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+pub mod config;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all="snake_case")]
 pub struct RepoStatus {
