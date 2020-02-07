@@ -89,6 +89,44 @@ impl Config {
         }))
     }
 
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), ConfigError> {
+        let mut path = PathBuf::from(path.as_ref());
+        Config::device_config_path(&mut path, &self.device.hub);
+
+        // TODO: More safety... save a backup...
+        let writer = BufWriter::new(fs::File::create(&path)?);
+        serde_json::to_writer_pretty(writer, &self.device.config)?;
+        Ok(())
+    }
+
+    pub fn star<P1: AsRef<Path>, P2: AsRef<Path>>(&mut self, path: P1, alias: Option<P2>) -> bool {
+        let path = path.as_ref();
+        if !path.exists() || !path.is_dir() {
+            return false;
+        }
+
+        let alias = match alias {
+            Some(alias) =>
+                if let Some(alias) = alias.as_ref().to_str() {
+                    alias.to_string()
+                } else {
+                    return false
+                },
+            None => {
+                let dir = path.file_name().unwrap();
+                if let Some(alias) = dir.to_str() {
+                    alias.to_string()
+                } else {
+                    return false
+                }
+            }
+        };
+
+        self.device.config.starred.insert(alias, StoredPath::from(path));
+
+        true
+    }
+
     fn device_config_path(config_path: &mut PathBuf, hub: &str) {
         config_path.push(DEVICE_CONFIG_DIR);
         config_path.push(&hub);
@@ -126,9 +164,16 @@ struct DeviceConfig {
     // env_dir: HashMap<String, StoredPath>,
 }
 
+// TODO: Handle non UTF-8 properly... serialize as base64?
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 struct StoredPath(String);
+
+impl<P: AsRef<Path>> From<P> for StoredPath {
+    fn from(path: P) -> StoredPath {
+        StoredPath(path.as_ref().to_string_lossy().into_owned())
+    }
+}
 
 #[derive(Debug)]
 pub enum ConfigError {
