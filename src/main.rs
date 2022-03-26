@@ -94,7 +94,10 @@ fn main() -> Result<(), i32> {
         ("backupcheck", Some(matches)) => {
             let dir = matches.value_of_os("DIR")
                 .unwrap();
-            backup_check_dir(dir)?;
+
+            if backup_check_dir(dir)? {
+                println!("Determined repo to be clean: {:?}", dir);
+            }
         },
         (_, _) => unreachable!(),
     }
@@ -102,7 +105,7 @@ fn main() -> Result<(), i32> {
     Ok(())
 }
 
-fn backup_check_dir(dir: &OsStr) -> Result<(), i32> {
+fn backup_check_dir(dir: &OsStr) -> Result<bool, i32> {
     let mut repo = match Repository::open(dir.clone()) {
         Ok(repo) => repo,
         Err(_) => {
@@ -116,22 +119,22 @@ fn backup_check_dir(dir: &OsStr) -> Result<(), i32> {
 
     if status.bare {
         println!("Did not check bare repo");
-        return Ok(());
+        return Ok(false);
     }
 
     if !status.clean_status {
         println!("Repo has modified/untracked files: {:?}", dir);
-        return Ok(());
+        return Ok(false);
     }
 
     if !status.clean_state {
         println!("Repo has a merge/rebase in progress: {:?}", dir);
-        return Ok(());
+        return Ok(false);
     }
 
     if status.remotes.len() == 0 {
         println!("Repo has no remotes! {:?}", dir);
-        return Ok(());
+        return Ok(false);
     }
 
     let mut clean = true;
@@ -158,5 +161,5 @@ fn backup_check_dir(dir: &OsStr) -> Result<(), i32> {
         println!("\tRepo has stashes: {}", status.stashes);
     }
 
-    Ok(())
+    Ok(clean)
 }
