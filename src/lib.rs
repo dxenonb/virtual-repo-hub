@@ -43,7 +43,6 @@ impl BranchStatus {
         BranchStatus::LocalBranch { merged_in_remote }
     }
 
-
     fn merged_in_upstream(&self) -> bool {
         let tracking_status = match self {
             BranchStatus::TrackingBranch(status) => status,
@@ -97,6 +96,7 @@ pub fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
         });
     }
 
+    // check that all files are current or ignored
     let mut clean_status = true;
     {
         let statuses = repo.statuses(None)?;
@@ -167,10 +167,14 @@ pub fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
     }
 
     // loop over remote branches and check if the auxillary branches are merged
-    branch_iter = repo.branches(Some(git2::BranchType::Local))?;
+    // this will catch branches that are not tracking branches, but were in fact merged
+    branch_iter = repo.branches(Some(git2::BranchType::Remote))?;
     for remote_branch in branch_iter {
+        // get the remote commit
         let (remote_branch, _) = remote_branch?;
         let remote_commit = remote_branch.get().peel_to_commit()?.id();
+
+        // retain only branches that aren't merged in the remote branch
         let mut iter_err = None;
         local_only_branches.retain(|branch| {
             let commit = match branch.get().peel_to_commit() {
@@ -180,11 +184,14 @@ pub fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
                     return false;
                 },
             };
+
+            // find the merge base (common ancestor)
             let ancestor = repo.merge_base(commit, remote_commit)
                 .expect("merge base error");
 
-            let result = ancestor == commit;
-            if result {
+            if ancestor == commit {
+                // if local branch is merged in the remote branch, record the existence
+                // of the local branch, and return false since this branch is not local only
                 let name = match branch.name() {
                     Ok(branch) => branch.unwrap_or_else(|| "[non utf-8]")
                         .to_string(),
@@ -194,9 +201,10 @@ pub fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
                     },
                 };
                 branches.insert(name, BranchStatus::new_local_branch(true));
+                false
+            } else {
+                true
             }
-
-            result
         });
 
         if let Some(err) = iter_err {
@@ -208,6 +216,7 @@ pub fn get_status(repo: &mut Repository) -> Result<RepoStatus, git2::Error> {
         }
     }
 
+    // record the remaining branches as certainly local
     for local_branch in local_only_branches {
         let name = local_branch.name()?
             .unwrap_or_else(|| "[non utf-8]")
