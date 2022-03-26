@@ -95,11 +95,37 @@ fn main() -> Result<(), i32> {
             let dir = matches.value_of_os("DIR")
                 .unwrap();
 
-            if backup_check_dir(dir)? {
-                println!("Determined repo to be clean: {:?}", dir);
+            match backup_check_dir(dir) {
+                Ok(true) => {
+                    println!("Determined repo to be clean: {:?}", dir);
+                },
+                Ok(false) => {},
+                Err(-99) => {
+                    backup_check_all(dir)?;
+                },
+                Err(err) => return Err(err),
             }
         },
         (_, _) => unreachable!(),
+    }
+
+    Ok(())
+}
+
+fn backup_check_all(dir: &OsStr) -> Result<(), i32> {
+    let dirs = std::fs::read_dir(dir).expect("failed to read dir");
+    for dir in dirs {
+        let dir = dir.expect("failed to read dir info");
+        match backup_check_dir(dir.path().as_os_str()) {
+            Ok(true) => {
+                println!("Determined repo to be clean: {:?}", dir);
+            },
+            Ok(false) => {},
+            Err(-99) => {
+                println!("Not a git repo: {:?}", dir);
+            },
+            Err(err) => return Err(err),
+        }
     }
 
     Ok(())
@@ -109,8 +135,8 @@ fn backup_check_dir(dir: &OsStr) -> Result<bool, i32> {
     let mut repo = match Repository::open(dir.clone()) {
         Ok(repo) => repo,
         Err(_) => {
-            eprintln!("Failed to open a git repo at {:?}", &dir);
-            return Err(-1);
+            // TODO: make gud... i really want this done quick...
+            return Err(-99);
         }
     };
 
